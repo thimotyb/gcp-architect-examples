@@ -9,7 +9,8 @@ PREFIX="${PREFIX:-orders-cli}"
 gc() { gcloud --project="$PROJECT_ID" --quiet "$@"; }
 
 for key in $(gc services api-keys list --filter="displayName=$PREFIX-key" --format='value(name)'); do
-  gc services api-keys delete "$key"
+  # A key used in the last 7 days is protected: skip that check, the API is being removed too.
+  gc services api-keys delete "$key" --no-check-existing-usage
 done
 gc endpoints services delete "$PREFIX-gw.endpoints.$PROJECT_ID.cloud.goog"
 gc run services delete "$PREFIX-gw" --region="$REGION"
