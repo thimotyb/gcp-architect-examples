@@ -61,6 +61,32 @@ The two images are built by Cloud Build from `terraform_data` resources with `lo
 - the backend image is tagged with a hash of `app/`, so a code change rebuilds it;
 - the ESPv2 image is rebuilt when the Endpoints configuration ID changes.
 
+## Deploying again: change the prefix
+
+Each resource name starts with a prefix: `orders-cli` for gcloud and `orders-tf` for Terraform. The Endpoints service is named `PREFIX-gw.endpoints.PROJECT_ID.cloud.goog`.
+
+**Why the prefix must change.** When you delete an Endpoints service, with `destroy.sh` or `terraform destroy`, Service Management does not free its name right away:
+- the service is *soft-deleted* and stays reserved for **30 days**, so it can be restored with `gcloud endpoints services undelete`;
+- during that time, a deployment with the same name fails;
+- the other resources (Cloud Run, Artifact Registry, service accounts, API key) are not reserved and can be re-created at once.
+
+To deploy again within 30 days, choose a new prefix:
+
+```bash
+# gcloud
+PROJECT_ID=my-project PREFIX=orders-demo ./gcloud/deploy.sh
+PROJECT_ID=my-project PREFIX=orders-demo ./gcloud/destroy.sh     # same prefix to remove it
+
+# Terraform
+terraform -chdir=terraform apply   -var project_id=my-project -var prefix=orders-demo
+terraform -chdir=terraform destroy -var project_id=my-project -var prefix=orders-demo
+```
+
+- Use a different prefix for each variant if both run in the same project, for example `orders-demo-cli` and `orders-demo-tf`.
+- Keep the prefix short: it becomes part of service-account IDs, which are limited to 30 characters (the longest is `PREFIX-backend`, so the prefix can have at most 22 characters).
+- **Do not** undelete the old service to reuse its name with Terraform: Terraform would find an existing service it did not create, and the apply would fail.
+- **For a live demo**, deploy at least 5 minutes in advance. A new API key returns 403 for a minute or two. For the first few minutes Service Control does not enforce the quota yet, so no 429 is returned.
+
 ## Differences from the tutorial (checked on 2026-11-16)
 
 - **Service name**: the tutorial reserves the gateway's `run.app` hostname and uses it as the Endpoints service name. Service Management now refuses that name with *"Ownership for domain name ... cannot be verified"*. The example uses `PREFIX-gw.endpoints.PROJECT_ID.cloud.goog` instead, a name that every project owns. As a side effect, the placeholder deployment is no longer needed.
@@ -72,5 +98,5 @@ The two images are built by Cloud Build from `terraform_data` resources with `lo
 - **Propagation**: right after deployment, a new API key returns 403 for a minute or two (`test.sh` waits for it). Service Control can also return *"Failed to load service"* for the first few minutes. During that time ESPv2 fails open on the quota check, so no 429 is returned.
 - **The quota is not exact**: quota is checked in aggregate and enforced with some delay, so 10 to 20 writes pass before the first 429.
 - **In-memory data**: the orders live in the process memory. The backend runs with at most one instance, and the data resets when the instance restarts.
-- **Deleting a service**: a deleted Endpoints service stays reserved for 30 days. To deploy again before then, use another `PREFIX` (gcloud) or `prefix` (Terraform), or run `gcloud endpoints services undelete NAME`.
+- **Deleting a service**: a deleted Endpoints service name stays reserved for 30 days. See [Deploying again: change the prefix](#deploying-again-change-the-prefix).
 - **Cost**: Cloud Run scales to zero. The ongoing cost is a few cents for the images in Artifact Registry.
