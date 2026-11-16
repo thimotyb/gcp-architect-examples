@@ -1,0 +1,118 @@
+# Endpoints service configuration for the Orders API (OpenAPI 2.0, as ESPv2 requires).
+# Placeholders, filled by gcloud/deploy.sh (envsubst) or by Terraform (templatefile):
+#   ${HOST}         Endpoints service name, NAME.endpoints.PROJECT_ID.cloud.goog
+#   ${BACKEND_URL}  URL of the private Cloud Run service that runs FastAPI
+swagger: "2.0"
+info:
+  title: Orders API
+  description: FastAPI Orders API behind ESPv2 on Cloud Run
+  version: 1.0.0
+host: ${HOST}
+schemes: [https]
+consumes: [application/json]
+produces: [application/json]
+
+# Every operation is forwarded to the backend; ESPv2 signs each call with an ID token
+# whose audience is this address, so the backend can stay private.
+x-google-backend:
+  address: ${BACKEND_URL}
+  protocol: h2
+  path_translation: APPEND_PATH_TO_ADDRESS
+
+# An API key is required on every operation, except where security: [] overrides it.
+securityDefinitions:
+  api_key:
+    type: apiKey
+    name: key
+    in: query
+security:
+  - api_key: []
+
+# Quota: each consumer project may make 10 write calls per minute.
+x-google-management:
+  metrics:
+    - name: write-requests
+      displayName: Write requests
+      valueType: INT64
+      metricKind: DELTA
+  quota:
+    limits:
+      - name: write-limit
+        metric: write-requests
+        unit: 1/min/{project}
+        values:
+          STANDARD: 10
+
+paths:
+  /:
+    get:
+      operationId: root
+      summary: Health message, no API key needed
+      security: []
+      responses:
+        "200": { description: OK }
+  /orders:
+    get:
+      operationId: listOrders
+      summary: List orders
+      parameters:
+        - { name: status, in: query, required: false, type: string }
+        - { name: limit, in: query, required: false, type: integer }
+        - { name: offset, in: query, required: false, type: integer }
+      responses:
+        "200": { description: Order summaries }
+    post:
+      operationId: createOrder
+      summary: Create an order
+      x-google-quota:
+        metricCosts:
+          write-requests: 1
+      parameters:
+        - { name: body, in: body, required: true, schema: { type: object } }
+      responses:
+        "201": { description: Created }
+  /orders/{order_id}:
+    parameters:
+      - { name: order_id, in: path, required: true, type: integer }
+    get:
+      operationId: getOrder
+      summary: Get one order
+      responses:
+        "200": { description: Order }
+        "404": { description: Not found }
+    put:
+      operationId: replaceOrder
+      summary: Replace an order
+      x-google-quota:
+        metricCosts:
+          write-requests: 1
+      parameters:
+        - { name: body, in: body, required: true, schema: { type: object } }
+      responses:
+        "200": { description: Replaced }
+    patch:
+      operationId: updateOrder
+      summary: Change some fields of an order
+      x-google-quota:
+        metricCosts:
+          write-requests: 1
+      parameters:
+        - { name: body, in: body, required: true, schema: { type: object } }
+      responses:
+        "200": { description: Updated }
+    delete:
+      operationId: deleteOrder
+      summary: Delete an order
+      x-google-quota:
+        metricCosts:
+          write-requests: 1
+      responses:
+        "204": { description: Deleted }
+  /orders/{order_id}/lines:
+    get:
+      operationId: listOrderLines
+      summary: Lines of one order
+      parameters:
+        - { name: order_id, in: path, required: true, type: integer }
+      responses:
+        "200": { description: Order lines }

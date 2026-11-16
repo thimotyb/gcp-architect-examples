@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (ignored by git) and set your project.
+project_id = "my-project-id"
+# region   = "europe-west1"
+# prefix   = "orders-tf"

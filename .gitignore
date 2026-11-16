@@ -1,0 +1,15 @@
+# Terraform state holds the API key and resource details: never commit it.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+.terraform.lock.hcl.bak
+# Local credentials and environment
+.env
+*.json.key
+*-key.json
+__pycache__/
+*.pyc
+.venv/
